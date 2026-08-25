@@ -9,7 +9,7 @@ Pipeline:
 Usage:
     python scripts/generate_dmsp_report.py
     python scripts/generate_dmsp_report.py \
-        --input  testing_notebooks/heart-disease-prediction-notebook.ipynb \
+        --input  fixtures/notebooks/heart-disease-prediction-notebook.ipynb \
         --output outputs/dmsp_report_heart_disease.md
 """
 from __future__ import annotations
@@ -158,7 +158,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate NIH DMSP compliance report.")
     parser.add_argument(
         "--input",
-        default="testing_notebooks/heart-disease-prediction-notebook.ipynb",
+        default="fixtures/notebooks/heart-disease-prediction-notebook.ipynb",
         help="Path to .ipynb or .py file to audit.",
     )
     parser.add_argument(

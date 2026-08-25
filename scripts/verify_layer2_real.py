@@ -2,8 +2,8 @@
 using the live Claude API.
 
 Usage:
-    python scripts/test_layer2_real.py
-    python scripts/test_layer2_real.py --notebook testing_notebooks/test_notebook.ipynb
+    python scripts/verify_layer2_real.py
+    python scripts/verify_layer2_real.py --notebook fixtures/notebooks/test_notebook.ipynb
 """
 from __future__ import annotations
 
@@ -146,8 +146,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run Layer 2 tools with real Claude API.")
     parser.add_argument(
         "--notebook",
-        default="testing_notebooks/test_notebook.ipynb",
-        help="Path to the .ipynb or .py file to audit (default: testing_notebooks/test_notebook.ipynb).",
+        default="fixtures/notebooks/test_notebook.ipynb",
+        help="Path to the .ipynb or .py file to audit (default: fixtures/notebooks/test_notebook.ipynb).",
     )
     args = parser.parse_args()
     asyncio.run(main(args.notebook))

@@ -8,10 +8,10 @@ Source:
   https://raw.githubusercontent.com/GillesVandewiele/EHG-oversampling/
   master/experiments/oversampling_analysis.py
 
-Local copy: testing_notebooks/oversampling_analysis.py
+Local copy: fixtures/notebooks/oversampling_analysis.py
 
 Usage:
-    python scripts/test_vandewiele.py
+    python scripts/verify_vandewiele.py
 """
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ from satyarepro.tools.layer2.leakage_detector import LeakageDetector
 from satyarepro.tools.layer2.metrics_completeness_checker import MetricsCompletenessChecker
 from satyarepro.tools.parsers import parse_input
 
-_TARGET = "testing_notebooks/oversampling_analysis.py"
+_TARGET = "fixtures/notebooks/oversampling_analysis.py"
 
 # ── Usage-tracking wrapper ────────────────────────────────────────────────────
 

@@ -1,8 +1,8 @@
-"""Run DataProfiler against testing_data/heart_disease.csv and print a report.
+"""Run DataProfiler against fixtures/data/heart_disease.csv and print a report.
 
 Usage:
-    python scripts/test_data_profiler.py
-    python scripts/test_data_profiler.py --input testing_data/heart_disease.csv
+    python scripts/verify_data_profiler.py
+    python scripts/verify_data_profiler.py --input fixtures/data/heart_disease.csv
 """
 from __future__ import annotations
 
@@ -127,8 +127,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Profile a CSV dataset with DataProfiler.")
     parser.add_argument(
         "--input",
-        default="testing_data/heart_disease.csv",
-        help="Path to CSV file (default: testing_data/heart_disease.csv).",
+        default="fixtures/data/heart_disease.csv",
+        help="Path to CSV file (default: fixtures/data/heart_disease.csv).",
     )
     args = parser.parse_args()
     asyncio.run(main(args.input))

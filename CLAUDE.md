@@ -152,22 +152,22 @@ Built and tested (88 tests passing):
 ## Test Inputs and Integration Scripts
 Three categories of test inputs, each with a corresponding script:
 
-### Jupyter notebooks (testing_notebooks/)
+### Jupyter notebooks (fixtures/notebooks/)
 - test_notebook.ipynb — generic ML notebook for Layer 2 integration tests
 - heart-disease-prediction-notebook.ipynb — Kaggle heart disease notebook;
   used for DMSP compliance report pipeline
-  Script: scripts/test_layer2_real.py (all 5 Layer 2 tools)
+  Script: scripts/verify_layer2_real.py (all 5 Layer 2 tools)
           scripts/generate_dmsp_report.py (provenance → DMSP report)
 
-### Python scripts (testing_notebooks/)
+### Python scripts (fixtures/notebooks/)
 - oversampling_analysis.py — Vandewiele EHG oversampling (real-world EHR);
   known leakage: StandardScaler fit before CV split
-  Script: scripts/test_vandewiele.py (leakage_detector + metrics_checker)
+  Script: scripts/verify_vandewiele.py (leakage_detector + metrics_checker)
 
-### CSV datasets (testing_data/)
+### CSV datasets (fixtures/data/)
 - heart_disease.csv — UCI Cleveland dataset prepared by
-  testing_data/prepare_heart_disease_data.py (303 rows, 6 missing values)
-  Script: scripts/test_data_profiler.py (DataProfiler, no API key needed)
+  fixtures/data/prepare_heart_disease_data.py (303 rows, 6 missing values)
+  Script: scripts/verify_data_profiler.py (DataProfiler, no API key needed)
 
 Known gaps for Year 1 completion:
 - dependency_check requires requirements.txt content passed separately;
