@@ -251,3 +251,91 @@ class TestExtractAndCompareEmptyCandidates:
         results = await extract_and_compare(target_claim="some claim", candidates=[], client=mock)
         assert results == []
         assert len(mock.calls) == 0
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# _judge_candidate — has_body_text=False hard floor
+#
+# Design decision: title-only Asta snippets (snippetKind == "title") give the
+# LLM nothing to judge from but a bare title, which produced inconsistent
+# comparison_type labels in a real run. The floor is enforced in Python
+# (no LLM call at all) rather than left to a prompt instruction, matching the
+# empty-extracted_claim rule above.
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestExtractAndCompareTitleOnlyFloor:
+    async def test_has_body_text_false_skips_llm_call(self):
+        mock = MockClient()
+        candidates = [{**_candidate("1", "Title Only Paper", "Title Only Paper"), "has_body_text": False}]
+
+        results = await extract_and_compare(
+            target_claim="some claim", candidates=candidates, client=mock
+        )
+
+        assert len(mock.calls) == 0
+        assert len(results) == 1
+        result = results[0]
+        assert result["corpus_id"] == "1"
+        assert result["title"] == "Title Only Paper"
+        assert result["extracted_claim"] == ""
+        assert result["comparison_type"] == "not_comparable"
+        assert result["agreement"] == "no_comparable_evidence"
+        assert result["confidence"] == "low"
+        assert result["population_modality"]
+        assert result["evidence"]
+        assert "error" not in result
+
+    async def test_has_body_text_false_mixed_with_normal_candidates(self):
+        mock = MockClient()
+        mock.enqueue(_ok_response(_FULL_JUDGMENT))
+        mock.enqueue(_ok_response(_FULL_JUDGMENT))
+        candidates = [
+            _candidate("1", "Paper One", "good snippet one"),
+            {**_candidate("2", "Title Only", "Title Only"), "has_body_text": False},
+            _candidate("3", "Paper Three", "good snippet three"),
+        ]
+
+        results = await extract_and_compare(
+            target_claim="some claim", candidates=candidates, client=mock
+        )
+
+        # Only the two has_body_text-true/absent candidates hit the LLM.
+        assert len(mock.calls) == 2
+        assert len(results) == 3
+        assert results[0]["comparison_type"] == "direct"
+        assert results[1]["comparison_type"] == "not_comparable"
+        assert results[1]["agreement"] == "no_comparable_evidence"
+        assert results[2]["comparison_type"] == "direct"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# _judge_candidate — has_body_text=True or absent: unaffected regression
+# check, still goes through the normal LLM-call path
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestExtractAndCompareHasBodyTextTrueOrAbsentUnaffected:
+    async def test_has_body_text_true_goes_through_llm(self):
+        mock = MockClient()
+        mock.enqueue(_ok_response(_FULL_JUDGMENT))
+        candidates = [{**_candidate("1", "Paper One", "some snippet text"), "has_body_text": True}]
+
+        results = await extract_and_compare(
+            target_claim="some claim", candidates=candidates, client=mock
+        )
+
+        assert len(mock.calls) == 1
+        assert results[0]["comparison_type"] == "direct"
+        assert results[0]["agreement"] == "agree"
+
+    async def test_has_body_text_absent_defaults_to_llm_path(self):
+        mock = MockClient()
+        mock.enqueue(_ok_response(_FULL_JUDGMENT))
+        candidates = [_candidate("1", "Paper One", "some snippet text")]  # no has_body_text key
+
+        results = await extract_and_compare(
+            target_claim="some claim", candidates=candidates, client=mock
+        )
+
+        assert len(mock.calls) == 1
+        assert results[0]["comparison_type"] == "direct"
+        assert results[0]["agreement"] == "agree"

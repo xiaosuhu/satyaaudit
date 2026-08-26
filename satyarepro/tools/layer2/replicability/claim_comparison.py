@@ -86,10 +86,45 @@ Respond with ONLY a JSON object (no prose, no markdown fences) with these fields
 - "confidence": "high" | "medium" | "low\""""
 
 
+_TITLE_ONLY_POPULATION_MODALITY = "insufficient snippet text — title only"
+_TITLE_ONLY_EVIDENCE = (
+    "Candidate snippet contains only the paper title, with no body or abstract "
+    "text to judge against."
+)
+
+
+def _title_only_result(candidate: dict[str, Any]) -> dict[str, Any]:
+    """Hard floor for candidates with has_body_text=False.
+
+    Enforced in Python, not left to the LLM to infer from a bare title —
+    mirrors the empty-extracted_claim -> no_comparable_evidence rule already
+    enforced below. No LLM call is made for these candidates.
+    """
+    return {
+        "corpus_id": candidate.get("corpus_id"),
+        "title": candidate.get("title"),
+        "population_modality": _TITLE_ONLY_POPULATION_MODALITY,
+        "extracted_claim": "",
+        "comparison_type": "not_comparable",
+        "agreement": "no_comparable_evidence",
+        "evidence": _TITLE_ONLY_EVIDENCE,
+        "confidence": "low",
+    }
+
+
 async def _judge_candidate(
     target_claim: str, candidate: dict[str, Any], client: ModelClient
 ) -> dict[str, Any]:
-    """Make one LLM call to judge a single candidate against the target claim."""
+    """Make one LLM call to judge a single candidate against the target claim.
+
+    Short-circuits before the LLM call when has_body_text is explicitly
+    False — title-only candidates get a fixed not_comparable/
+    no_comparable_evidence result instead of asking the LLM to guess from a
+    bare title. Absent or True has_body_text goes through the normal path.
+    """
+    if candidate.get("has_body_text") is False:
+        return _title_only_result(candidate)
+
     response = await client.complete(
         messages=[
             {

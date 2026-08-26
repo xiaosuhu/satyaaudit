@@ -99,9 +99,10 @@ class TestDistillAndRetrieve:
         asta = FakeAstaClient(snippet_results=[])
 
         await distill_and_retrieve(task_description="task", client=mock, asta_client=asta, limit=7)
-        # Internally over-fetches (2x limit) to leave headroom for corpus_id
-        # dedup — the raw Asta call limit is not the same as the returned count.
-        assert asta.search_calls[0]["limit"] == 14
+        # Internally over-fetches (3x limit) to leave headroom for corpus_id
+        # dedup and the has_body_text/exclude_corpus_id preference — the raw
+        # Asta call limit is not the same as the returned count.
+        assert asta.search_calls[0]["limit"] == 21
 
     async def test_default_limit_is_five(self):
         mock = MockClient()
@@ -109,7 +110,7 @@ class TestDistillAndRetrieve:
         asta = FakeAstaClient(snippet_results=[])
 
         await distill_and_retrieve(task_description="task", client=mock, asta_client=asta)
-        assert asta.search_calls[0]["limit"] == 10
+        assert asta.search_calls[0]["limit"] == 15
 
     async def test_normalizes_real_nested_asta_shape(self):
         mock = MockClient()
@@ -267,3 +268,176 @@ class TestDistillAndRetrieveDedup:
         assert corpus_ids.count("1") == 1
         assert results[0]["corpus_id"] == "1"
         assert results[0]["snippet"] == "s1a"  # highest score among the "1" duplicates
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# _extract_candidate (via distill_and_retrieve) — has_body_text derivation
+# from Asta's snippetKind field (title-only snippets get inconsistent LLM
+# judgments downstream, so this is used as a hard floor in claim_comparison)
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestHasBodyText:
+    async def test_title_snippet_kind_gets_has_body_text_false(self):
+        mock = MockClient()
+        mock.enqueue(_ok_response("some distilled query"))
+        asta = FakeAstaClient(
+            snippet_results=[
+                {
+                    "paper": {"corpusId": "1", "title": "Title Only Paper"},
+                    "snippet": {"text": "Title Only Paper", "snippetKind": "title"},
+                }
+            ]
+        )
+
+        results = await distill_and_retrieve(task_description="task", client=mock, asta_client=asta)
+        assert results[0]["has_body_text"] is False
+
+    async def test_body_snippet_kind_gets_has_body_text_true(self):
+        mock = MockClient()
+        mock.enqueue(_ok_response("some distilled query"))
+        asta = FakeAstaClient(
+            snippet_results=[
+                {
+                    "paper": {"corpusId": "1", "title": "Body Paper"},
+                    "snippet": {"text": "actual body text here", "snippetKind": "body"},
+                }
+            ]
+        )
+
+        results = await distill_and_retrieve(task_description="task", client=mock, asta_client=asta)
+        assert results[0]["has_body_text"] is True
+
+    async def test_abstract_snippet_kind_gets_has_body_text_true(self):
+        mock = MockClient()
+        mock.enqueue(_ok_response("some distilled query"))
+        asta = FakeAstaClient(
+            snippet_results=[
+                {
+                    "paper": {"corpusId": "1", "title": "Abstract Paper"},
+                    "snippet": {"text": "abstract text here", "snippetKind": "abstract"},
+                }
+            ]
+        )
+
+        results = await distill_and_retrieve(task_description="task", client=mock, asta_client=asta)
+        assert results[0]["has_body_text"] is True
+
+    async def test_missing_snippet_kind_defaults_has_body_text_true(self):
+        mock = MockClient()
+        mock.enqueue(_ok_response("some distilled query"))
+        # Old-style flat fixture, predating snippetKind — must not be assumed
+        # title-only just because the field is absent.
+        asta = FakeAstaClient(
+            snippet_results=[{"corpus_id": "999", "title": "Flat Paper", "snippet": "flat text"}]
+        )
+
+        results = await distill_and_retrieve(task_description="task", client=mock, asta_client=asta)
+        assert results[0]["has_body_text"] is True
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# distill_and_retrieve — exclude_corpus_id (mirrors outcome_distribution_
+# checker.py's pattern: keep the audited paper's own corpus_id out of its
+# own comparator set)
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestExcludeCorpusId:
+    async def test_exclude_corpus_id_filters_matching_result(self):
+        mock = MockClient()
+        mock.enqueue(_ok_response("some distilled query"))
+        asta = FakeAstaClient(
+            snippet_results=[
+                {"paper": {"corpusId": "1", "title": "Self Paper"}, "snippet": {"text": "self citation"}},
+                {"paper": {"corpusId": "2", "title": "Other Paper"}, "snippet": {"text": "other"}},
+            ]
+        )
+
+        results = await distill_and_retrieve(
+            task_description="task", client=mock, asta_client=asta, exclude_corpus_id="1"
+        )
+        assert [r["corpus_id"] for r in results] == ["2"]
+
+    async def test_exclude_corpus_id_none_excludes_nothing(self):
+        mock = MockClient()
+        mock.enqueue(_ok_response("some distilled query"))
+        asta = FakeAstaClient(
+            snippet_results=[{"paper": {"corpusId": "1", "title": "Paper"}, "snippet": {"text": "text"}}]
+        )
+
+        results = await distill_and_retrieve(task_description="task", client=mock, asta_client=asta)
+        assert [r["corpus_id"] for r in results] == ["1"]
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# distill_and_retrieve — combined: exclude_corpus_id + has_body_text
+# preference both apply before truncation to `limit`
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestBodyTextPreferenceAndExclusionCombined:
+    async def test_prefers_body_text_and_excludes_self_citation(self):
+        mock = MockClient()
+        mock.enqueue(_ok_response("some distilled query"))
+        snippet_results = [
+            {
+                "paper": {"corpusId": "SELF", "title": "Self"},
+                "snippet": {"text": "self citation body", "snippetKind": "body"},
+            },
+            {
+                "paper": {"corpusId": "T1", "title": "Title Only 1"},
+                "snippet": {"text": "Title Only 1", "snippetKind": "title"},
+            },
+            {
+                "paper": {"corpusId": "T2", "title": "Title Only 2"},
+                "snippet": {"text": "Title Only 2", "snippetKind": "title"},
+            },
+            {
+                "paper": {"corpusId": "B1", "title": "Body 1"},
+                "snippet": {"text": "body text 1", "snippetKind": "body"},
+            },
+            {
+                "paper": {"corpusId": "B2", "title": "Body 2"},
+                "snippet": {"text": "body text 2", "snippetKind": "abstract"},
+            },
+        ]
+        asta = FakeAstaClient(snippet_results=snippet_results)
+
+        results = await distill_and_retrieve(
+            task_description="task",
+            client=mock,
+            asta_client=asta,
+            limit=2,
+            exclude_corpus_id="SELF",
+        )
+
+        corpus_ids = [r["corpus_id"] for r in results]
+        assert len(results) == 2
+        assert "SELF" not in corpus_ids
+        assert all(r["has_body_text"] for r in results)
+        assert set(corpus_ids) == {"B1", "B2"}
+
+    async def test_title_only_fills_remaining_slots_when_not_enough_body_text(self):
+        mock = MockClient()
+        mock.enqueue(_ok_response("some distilled query"))
+        snippet_results = [
+            {
+                "paper": {"corpusId": "B1", "title": "Body 1"},
+                "snippet": {"text": "body text 1", "snippetKind": "body"},
+            },
+            {
+                "paper": {"corpusId": "T1", "title": "Title Only 1"},
+                "snippet": {"text": "Title Only 1", "snippetKind": "title"},
+            },
+            {
+                "paper": {"corpusId": "T2", "title": "Title Only 2"},
+                "snippet": {"text": "Title Only 2", "snippetKind": "title"},
+            },
+        ]
+        asta = FakeAstaClient(snippet_results=snippet_results)
+
+        results = await distill_and_retrieve(
+            task_description="task", client=mock, asta_client=asta, limit=3
+        )
+
+        corpus_ids = [r["corpus_id"] for r in results]
+        assert len(results) == 3
+        assert set(corpus_ids) == {"B1", "T1", "T2"}
