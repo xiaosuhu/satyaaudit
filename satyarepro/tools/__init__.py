@@ -36,9 +36,9 @@ def create_default_registry(
         CheckpointCheck(),
         # Layer 2 — semantic analysis, LLM-powered
         LeakageDetector(client),
-        SubgroupReporter(client),
         ProvenanceChecker(client),
-        # Applicability — cross-study outcome distribution checks
+        # Applicability — cross-study outcome distribution and subgroup reporting checks
+        SubgroupReporter(client),
         OutcomeDistributionChecker(client, asta_client),
         # Replicability — within-paper statistical robustness signals
         WithinPaperRobustnessChecker(client),

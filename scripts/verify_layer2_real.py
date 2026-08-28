@@ -28,7 +28,7 @@ from satyarepro.tools.layer2.hyperparameter_reporter import HyperparameterReport
 from satyarepro.tools.layer2.leakage_detector import LeakageDetector
 from satyarepro.tools.layer2.metrics_completeness_checker import MetricsCompletenessChecker
 from satyarepro.tools.layer2.provenance_checker import ProvenanceChecker
-from satyarepro.tools.layer2.subgroup_reporter import SubgroupReporter
+from satyarepro.tools.layer2.applicability.subgroup_reporter import SubgroupReporter
 from satyarepro.tools.parsers import parse_input
 
 

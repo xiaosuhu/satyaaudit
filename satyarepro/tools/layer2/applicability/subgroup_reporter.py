@@ -3,7 +3,7 @@ from __future__ import annotations
 from satyarepro.client.base import ModelClient
 from satyarepro.types import ToolSchema
 
-from ..base import Tool
+from ...base import Tool
 
 _SYSTEM = (
     "You are a biomedical AI fairness auditor specialising in demographic subgroup analysis "
