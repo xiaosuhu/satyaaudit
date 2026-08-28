@@ -9,6 +9,7 @@ from .layer2 import (
     LeakageDetector,
     OutcomeDistributionChecker,
     ProvenanceChecker,
+    ReportingCompletenessChecker,
     SubgroupReporter,
     WithinPaperRobustnessChecker,
 )
@@ -40,6 +41,7 @@ def create_default_registry(
         # Applicability — cross-study outcome distribution and subgroup reporting checks
         SubgroupReporter(client),
         OutcomeDistributionChecker(client, asta_client),
+        ReportingCompletenessChecker(client),
         # Replicability — within-paper statistical robustness signals
         WithinPaperRobustnessChecker(client),
         # Report generators

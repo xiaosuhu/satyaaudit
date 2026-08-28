@@ -23,6 +23,9 @@ from satyarepro.tools.layer2.hyperparameter_reporter import HyperparameterReport
 from satyarepro.tools.layer2.leakage_detector import LeakageDetector
 from satyarepro.tools.layer2.metrics_completeness_checker import MetricsCompletenessChecker
 from satyarepro.tools.layer2.provenance_checker import ProvenanceChecker
+from satyarepro.tools.layer2.applicability.reporting_completeness_checker import (
+    ReportingCompletenessChecker,
+)
 from satyarepro.tools.layer2.applicability.subgroup_reporter import SubgroupReporter
 from satyarepro.tools.parsers import parse_input
 from satyarepro.tools.parsers.notebook_parser import NotebookParser
@@ -328,6 +331,123 @@ class TestSubgroupReporter:
         assert SubgroupReporter().schema.name == "subgroup_reporter"
 
 
+_SAMPLE_MANUSCRIPT = (
+    "Methods: We included adult patients (age 18-75) with confirmed diagnosis at Hospital A. "
+    "Patients with incomplete records were excluded. "
+    "Discussion: The model was validated on an external cohort from Hospital B. "
+    "Limitations: Our sample may not generalize to pediatric populations."
+)
+
+_FULL_PRESENT_ARRAY = json.dumps(
+    [
+        {
+            "item_id": "target_population_scope",
+            "status": "present",
+            "evidence_source": "manuscript",
+            "evidence": "adult patients (age 18-75) with confirmed diagnosis at Hospital A",
+            "reasoning": "Target population and clinical scope explicitly stated.",
+        },
+        {
+            "item_id": "inclusion_exclusion_criteria",
+            "status": "present",
+            "evidence_source": "manuscript",
+            "evidence": "Patients with incomplete records were excluded.",
+            "reasoning": "Exclusion criteria stated.",
+        },
+        {
+            "item_id": "external_validation",
+            "status": "present",
+            "evidence_source": "manuscript",
+            "evidence": "validated on an external cohort from Hospital B",
+            "reasoning": "External validation reported.",
+        },
+        {
+            "item_id": "limitations_discussed",
+            "status": "present",
+            "evidence_source": "manuscript",
+            "evidence": "may not generalize to pediatric populations",
+            "reasoning": "Limitations discussed.",
+        },
+    ]
+)
+
+_CODE_ONLY_ARRAY = json.dumps(
+    [
+        {
+            "item_id": "target_population_scope",
+            "status": "not_determinable_from_code",
+            "evidence_source": "none",
+            "evidence": "",
+            "reasoning": "Code contains no narrative description of target population.",
+        },
+        {
+            "item_id": "inclusion_exclusion_criteria",
+            "status": "not_determinable_from_code",
+            "evidence_source": "none",
+            "evidence": "",
+            "reasoning": "No inclusion/exclusion narrative present in code.",
+        },
+        {
+            "item_id": "external_validation",
+            "status": "not_determinable_from_code",
+            "evidence_source": "none",
+            "evidence": "",
+            "reasoning": "No explicit external validation signal found.",
+        },
+        {
+            "item_id": "limitations_discussed",
+            "status": "not_determinable_from_code",
+            "evidence_source": "none",
+            "evidence": "",
+            "reasoning": "Limitations are a narrative item, not visible in code.",
+        },
+    ]
+)
+
+
+class TestReportingCompletenessChecker:
+    async def test_manuscript_only(self):
+        mock = MockClient()
+        mock.enqueue(_ok_response(_FULL_PRESENT_ARRAY))
+        tool = ReportingCompletenessChecker(client=mock)
+        result = json.loads(await tool.execute(manuscript_text=_SAMPLE_MANUSCRIPT))
+        assert len(result) == 4
+        assert result[0]["item_id"] == "target_population_scope"
+        assert result[0]["status"] == "present"
+        assert _SAMPLE_MANUSCRIPT in mock.calls[0]["messages"][0]["content"]
+
+    async def test_code_only_not_determinable(self):
+        mock = MockClient()
+        mock.enqueue(_ok_response(_CODE_ONLY_ARRAY))
+        tool = ReportingCompletenessChecker(client=mock)
+        result = json.loads(await tool.execute(code=_SAMPLE_CODE))
+        assert len(result) == 4
+        assert all(item["status"] == "not_determinable_from_code" for item in result)
+        sent_prompt = mock.calls[0]["messages"][0]["content"]
+        assert _SAMPLE_CODE in sent_prompt
+        assert "not_determinable_from_code" in sent_prompt
+
+    async def test_both_provided(self):
+        mock = MockClient()
+        mock.enqueue(_ok_response(_FULL_PRESENT_ARRAY))
+        tool = ReportingCompletenessChecker(client=mock)
+        result = json.loads(
+            await tool.execute(manuscript_text=_SAMPLE_MANUSCRIPT, code=_SAMPLE_CODE)
+        )
+        assert len(result) == 4
+        sent_prompt = mock.calls[0]["messages"][0]["content"]
+        assert _SAMPLE_MANUSCRIPT in sent_prompt
+        assert _SAMPLE_CODE in sent_prompt
+
+    async def test_raises_without_manuscript_or_code(self):
+        tool = ReportingCompletenessChecker(client=MockClient())
+        with pytest.raises(ValueError):
+            await tool.execute()
+
+    async def test_schema_name(self):
+        assert ReportingCompletenessChecker().schema.name == "reporting_completeness_checker"
+
+
 class TestProvenanceChecker:
     async def test_returns_llm_response(self):
         mock = MockClient()
@@ -627,13 +747,14 @@ class TestParseInput:
 # ══════════════════════════════════════════════════════════════════════════════
 
 class TestRegistry:
-    def test_all_fourteen_tools_registered(self):
+    def test_all_fifteen_tools_registered(self):
         registry = create_default_registry()
         names = {s.name for s in registry.schemas()}
         expected = {
             "seed_check", "dependency_check", "split_check", "checkpoint_check",
             "leakage_detector", "subgroup_reporter", "provenance_checker",
             "outcome_distribution_checker",
+            "reporting_completeness_checker",
             "within_paper_robustness_checker",
             "tripod_ai_generator", "dmsp_generator",
             "notebook_parser", "script_parser", "repo_fetcher",

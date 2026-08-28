@@ -1,4 +1,8 @@
-from .applicability import OutcomeDistributionChecker, SubgroupReporter
+from .applicability import (
+    OutcomeDistributionChecker,
+    ReportingCompletenessChecker,
+    SubgroupReporter,
+)
 from .hyperparameter_reporter import HyperparameterReporter
 from .leakage_detector import LeakageDetector
 from .metrics_completeness_checker import MetricsCompletenessChecker
@@ -12,5 +16,6 @@ __all__ = [
     "HyperparameterReporter",
     "MetricsCompletenessChecker",
     "OutcomeDistributionChecker",
+    "ReportingCompletenessChecker",
     "WithinPaperRobustnessChecker",
 ]
