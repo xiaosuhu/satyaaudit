@@ -26,6 +26,9 @@ from satyarepro.tools.layer2.provenance_checker import ProvenanceChecker
 from satyarepro.tools.layer2.applicability.documentation_completeness_checker import (
     DocumentationCompletenessChecker,
 )
+from satyarepro.tools.layer2.applicability.explainability_reporting_checker import (
+    ExplainabilityReportingChecker,
+)
 from satyarepro.tools.layer2.applicability.reporting_completeness_checker import (
     ReportingCompletenessChecker,
 )
@@ -581,6 +584,129 @@ class TestDocumentationCompletenessChecker:
         )
 
 
+_SAMPLE_MANUSCRIPT_EXPLAINABILITY = (
+    "Interpretability: To explain individual predictions, we applied SHAP (SHapley "
+    "Additive exPlanations) to the trained gradient boosting classifier. "
+    "Figure 3 shows the SHAP summary plot ranking the top 10 features by mean absolute "
+    "SHAP value, and Table 4 reports per-feature attribution scores for three example "
+    "patients. "
+    "Limitations: SHAP values were computed using a background dataset of 100 randomly "
+    "sampled training instances; we note that the choice of background dataset can "
+    "influence the resulting attributions and may not fully capture the reference "
+    "distribution of the deployment population."
+)
+
+_FULL_PRESENT_EXPLAINABILITY_ARRAY = json.dumps(
+    [
+        {
+            "item_id": "explainability_method_applied",
+            "status": "present",
+            "evidence_source": "manuscript",
+            "evidence": "we applied SHAP (SHapley Additive exPlanations) to the trained "
+            "gradient boosting classifier",
+            "reasoning": "SHAP is explicitly applied to the model's predictions.",
+        },
+        {
+            "item_id": "feature_attribution_reported",
+            "status": "present",
+            "evidence_source": "manuscript",
+            "evidence": "Figure 3 shows the SHAP summary plot ranking the top 10 features "
+            "by mean absolute SHAP value, and Table 4 reports per-feature attribution "
+            "scores for three example patients",
+            "reasoning": "Feature importance rankings and per-prediction attributions are "
+            "reported and visualized.",
+        },
+        {
+            "item_id": "explanation_method_limitations_discussed",
+            "status": "present",
+            "evidence_source": "manuscript",
+            "evidence": "the choice of background dataset can influence the resulting "
+            "attributions and may not fully capture the reference distribution of the "
+            "deployment population",
+            "reasoning": "SHAP's background dataset limitation is explicitly discussed.",
+        },
+    ]
+)
+
+_CODE_ONLY_EXPLAINABILITY_ARRAY = json.dumps(
+    [
+        {
+            "item_id": "explainability_method_applied",
+            "status": "not_determinable_from_code",
+            "evidence_source": "none",
+            "evidence": "",
+            "reasoning": "No shap/lime import or explainer call found in code.",
+        },
+        {
+            "item_id": "feature_attribution_reported",
+            "status": "not_determinable_from_code",
+            "evidence_source": "none",
+            "evidence": "",
+            "reasoning": "Whether attributions were reported is a narrative item, not "
+            "visible in code.",
+        },
+        {
+            "item_id": "explanation_method_limitations_discussed",
+            "status": "not_determinable_from_code",
+            "evidence_source": "none",
+            "evidence": "",
+            "reasoning": "Method limitation discussion is a narrative item, not visible "
+            "in code.",
+        },
+    ]
+)
+
+
+class TestExplainabilityReportingChecker:
+    async def test_manuscript_only(self):
+        mock = MockClient()
+        mock.enqueue(_ok_response(_FULL_PRESENT_EXPLAINABILITY_ARRAY))
+        tool = ExplainabilityReportingChecker(client=mock)
+        result = json.loads(
+            await tool.execute(manuscript_text=_SAMPLE_MANUSCRIPT_EXPLAINABILITY)
+        )
+        assert len(result) == 3
+        assert result[0]["item_id"] == "explainability_method_applied"
+        assert result[0]["status"] == "present"
+        assert _SAMPLE_MANUSCRIPT_EXPLAINABILITY in mock.calls[0]["messages"][0]["content"]
+
+    async def test_code_only_not_determinable(self):
+        mock = MockClient()
+        mock.enqueue(_ok_response(_CODE_ONLY_EXPLAINABILITY_ARRAY))
+        tool = ExplainabilityReportingChecker(client=mock)
+        result = json.loads(await tool.execute(code=_SAMPLE_CODE))
+        assert len(result) == 3
+        assert all(item["status"] == "not_determinable_from_code" for item in result)
+        sent_prompt = mock.calls[0]["messages"][0]["content"]
+        assert _SAMPLE_CODE in sent_prompt
+        assert "not_determinable_from_code" in sent_prompt
+
+    async def test_both_provided(self):
+        mock = MockClient()
+        mock.enqueue(_ok_response(_FULL_PRESENT_EXPLAINABILITY_ARRAY))
+        tool = ExplainabilityReportingChecker(client=mock)
+        result = json.loads(
+            await tool.execute(
+                manuscript_text=_SAMPLE_MANUSCRIPT_EXPLAINABILITY, code=_SAMPLE_CODE
+            )
+        )
+        assert len(result) == 3
+        sent_prompt = mock.calls[0]["messages"][0]["content"]
+        assert _SAMPLE_MANUSCRIPT_EXPLAINABILITY in sent_prompt
+        assert _SAMPLE_CODE in sent_prompt
+
+    async def test_raises_without_manuscript_or_code(self):
+        tool = ExplainabilityReportingChecker(client=MockClient())
+        with pytest.raises(ValueError):
+            await tool.execute()
+
+    async def test_schema_name(self):
+        assert (
+            ExplainabilityReportingChecker().schema.name
+            == "explainability_reporting_checker"
+        )
+
+
 class TestProvenanceChecker:
     async def test_returns_llm_response(self):
         mock = MockClient()
@@ -889,6 +1015,7 @@ class TestRegistry:
             "outcome_distribution_checker",
             "reporting_completeness_checker",
             "documentation_completeness_checker",
+            "explainability_reporting_checker",
             "within_paper_robustness_checker",
             "tripod_ai_generator", "dmsp_generator",
             "notebook_parser", "script_parser", "repo_fetcher",

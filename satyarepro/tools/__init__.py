@@ -7,6 +7,7 @@ from .base import Tool, ToolRegistry
 from .layer1 import CheckpointCheck, DependencyCheck, SeedCheck, SplitCheck
 from .layer2 import (
     DocumentationCompletenessChecker,
+    ExplainabilityReportingChecker,
     LeakageDetector,
     OutcomeDistributionChecker,
     ProvenanceChecker,
@@ -44,6 +45,7 @@ def create_default_registry(
         OutcomeDistributionChecker(client, asta_client),
         ReportingCompletenessChecker(client),
         DocumentationCompletenessChecker(client),
+        ExplainabilityReportingChecker(client),
         # Replicability — within-paper statistical robustness signals
         WithinPaperRobustnessChecker(client),
         # Report generators
