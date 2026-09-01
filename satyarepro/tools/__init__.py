@@ -6,6 +6,7 @@ from satyarepro.client.base import ModelClient
 from .base import Tool, ToolRegistry
 from .layer1 import CheckpointCheck, DependencyCheck, SeedCheck, SplitCheck
 from .layer2 import (
+    DocumentationCompletenessChecker,
     LeakageDetector,
     OutcomeDistributionChecker,
     ProvenanceChecker,
@@ -42,6 +43,7 @@ def create_default_registry(
         SubgroupReporter(client),
         OutcomeDistributionChecker(client, asta_client),
         ReportingCompletenessChecker(client),
+        DocumentationCompletenessChecker(client),
         # Replicability — within-paper statistical robustness signals
         WithinPaperRobustnessChecker(client),
         # Report generators

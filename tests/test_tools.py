@@ -23,6 +23,9 @@ from satyarepro.tools.layer2.hyperparameter_reporter import HyperparameterReport
 from satyarepro.tools.layer2.leakage_detector import LeakageDetector
 from satyarepro.tools.layer2.metrics_completeness_checker import MetricsCompletenessChecker
 from satyarepro.tools.layer2.provenance_checker import ProvenanceChecker
+from satyarepro.tools.layer2.applicability.documentation_completeness_checker import (
+    DocumentationCompletenessChecker,
+)
 from satyarepro.tools.layer2.applicability.reporting_completeness_checker import (
     ReportingCompletenessChecker,
 )
@@ -448,6 +451,136 @@ class TestReportingCompletenessChecker:
         assert ReportingCompletenessChecker().schema.name == "reporting_completeness_checker"
 
 
+_SAMPLE_MANUSCRIPT_DOCS = (
+    "Dataset: The dataset consists of 10,000 de-identified chest X-ray images, each "
+    "representing a single patient encounter, drawn as a sample from a larger regional "
+    "imaging archive. "
+    "Data was collected via direct extraction from the hospital's PACS system between "
+    "2018 and 2021. "
+    "Intended Use: This model is intended to assist radiologists in flagging suspicious "
+    "cases for review and is not intended for standalone diagnostic use. "
+    "Training Data: The model was trained on the 2018-2021 PACS extract described above, "
+    "with images resized and normalized prior to training."
+)
+
+_FULL_PRESENT_DOCS_ARRAY = json.dumps(
+    [
+        {
+            "item_id": "dataset_composition_documented",
+            "status": "present",
+            "evidence_source": "manuscript",
+            "evidence": "10,000 de-identified chest X-ray images, each representing a "
+            "single patient encounter, drawn as a sample from a larger regional imaging "
+            "archive",
+            "reasoning": "Dataset composition and sampling explicitly described.",
+        },
+        {
+            "item_id": "dataset_collection_process_documented",
+            "status": "present",
+            "evidence_source": "manuscript",
+            "evidence": "direct extraction from the hospital's PACS system between 2018 "
+            "and 2021",
+            "reasoning": "Collection process and time period stated.",
+        },
+        {
+            "item_id": "model_intended_use_documented",
+            "status": "present",
+            "evidence_source": "manuscript",
+            "evidence": "assist radiologists in flagging suspicious cases for review and "
+            "is not intended for standalone diagnostic use",
+            "reasoning": "Intended use and out-of-scope use stated.",
+        },
+        {
+            "item_id": "model_training_data_documented",
+            "status": "present",
+            "evidence_source": "manuscript",
+            "evidence": "trained on the 2018-2021 PACS extract described above, with "
+            "images resized and normalized prior to training",
+            "reasoning": "Training data source and preprocessing described.",
+        },
+    ]
+)
+
+_CODE_ONLY_DOCS_ARRAY = json.dumps(
+    [
+        {
+            "item_id": "dataset_composition_documented",
+            "status": "not_determinable_from_code",
+            "evidence_source": "none",
+            "evidence": "",
+            "reasoning": "Code contains no narrative description of dataset composition.",
+        },
+        {
+            "item_id": "dataset_collection_process_documented",
+            "status": "not_determinable_from_code",
+            "evidence_source": "none",
+            "evidence": "",
+            "reasoning": "No collection process narrative present in code.",
+        },
+        {
+            "item_id": "model_intended_use_documented",
+            "status": "not_determinable_from_code",
+            "evidence_source": "none",
+            "evidence": "",
+            "reasoning": "Intended use is a narrative item, not visible in code.",
+        },
+        {
+            "item_id": "model_training_data_documented",
+            "status": "not_determinable_from_code",
+            "evidence_source": "none",
+            "evidence": "",
+            "reasoning": "No explicit training data documentation signal found.",
+        },
+    ]
+)
+
+
+class TestDocumentationCompletenessChecker:
+    async def test_manuscript_only(self):
+        mock = MockClient()
+        mock.enqueue(_ok_response(_FULL_PRESENT_DOCS_ARRAY))
+        tool = DocumentationCompletenessChecker(client=mock)
+        result = json.loads(await tool.execute(manuscript_text=_SAMPLE_MANUSCRIPT_DOCS))
+        assert len(result) == 4
+        assert result[0]["item_id"] == "dataset_composition_documented"
+        assert result[0]["status"] == "present"
+        assert _SAMPLE_MANUSCRIPT_DOCS in mock.calls[0]["messages"][0]["content"]
+
+    async def test_code_only_not_determinable(self):
+        mock = MockClient()
+        mock.enqueue(_ok_response(_CODE_ONLY_DOCS_ARRAY))
+        tool = DocumentationCompletenessChecker(client=mock)
+        result = json.loads(await tool.execute(code=_SAMPLE_CODE))
+        assert len(result) == 4
+        assert all(item["status"] == "not_determinable_from_code" for item in result)
+        sent_prompt = mock.calls[0]["messages"][0]["content"]
+        assert _SAMPLE_CODE in sent_prompt
+        assert "not_determinable_from_code" in sent_prompt
+
+    async def test_both_provided(self):
+        mock = MockClient()
+        mock.enqueue(_ok_response(_FULL_PRESENT_DOCS_ARRAY))
+        tool = DocumentationCompletenessChecker(client=mock)
+        result = json.loads(
+            await tool.execute(manuscript_text=_SAMPLE_MANUSCRIPT_DOCS, code=_SAMPLE_CODE)
+        )
+        assert len(result) == 4
+        sent_prompt = mock.calls[0]["messages"][0]["content"]
+        assert _SAMPLE_MANUSCRIPT_DOCS in sent_prompt
+        assert _SAMPLE_CODE in sent_prompt
+
+    async def test_raises_without_manuscript_or_code(self):
+        tool = DocumentationCompletenessChecker(client=MockClient())
+        with pytest.raises(ValueError):
+            await tool.execute()
+
+    async def test_schema_name(self):
+        assert (
+            DocumentationCompletenessChecker().schema.name
+            == "documentation_completeness_checker"
+        )
+
+
 class TestProvenanceChecker:
     async def test_returns_llm_response(self):
         mock = MockClient()
@@ -755,6 +888,7 @@ class TestRegistry:
             "leakage_detector", "subgroup_reporter", "provenance_checker",
             "outcome_distribution_checker",
             "reporting_completeness_checker",
+            "documentation_completeness_checker",
             "within_paper_robustness_checker",
             "tripod_ai_generator", "dmsp_generator",
             "notebook_parser", "script_parser", "repo_fetcher",

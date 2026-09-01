@@ -1,4 +1,5 @@
 from .applicability import (
+    DocumentationCompletenessChecker,
     OutcomeDistributionChecker,
     ReportingCompletenessChecker,
     SubgroupReporter,
@@ -17,5 +18,6 @@ __all__ = [
     "MetricsCompletenessChecker",
     "OutcomeDistributionChecker",
     "ReportingCompletenessChecker",
+    "DocumentationCompletenessChecker",
     "WithinPaperRobustnessChecker",
 ]
