@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import json
-from typing import Any
 
 from satyarepro.client.base import ModelClient
 from satyarepro.types import ToolSchema
 
 from ...base import Tool
+from ..._llm_utils import _extract_json_array
 
 _SYSTEM = (
     "You are a biomedical AI reporting-standards auditor specialising in TRIPOD-AI and "
@@ -184,20 +184,3 @@ class ReportingCompletenessChecker(Tool):
         )
         parsed = _extract_json_array(response.content)
         return json.dumps(parsed, indent=2)
-
-
-def _extract_json_array(text: str) -> list[dict[str, Any]]:
-    cleaned = text.strip()
-    if cleaned.startswith("```"):
-        cleaned = cleaned.strip("`")
-        if cleaned.startswith("json"):
-            cleaned = cleaned[4:]
-        cleaned = cleaned.strip()
-    start = cleaned.find("[")
-    end = cleaned.rfind("]")
-    if start == -1 or end == -1 or end < start:
-        raise ValueError(f"Could not find a JSON array in LLM response: {text!r}")
-    parsed = json.loads(cleaned[start : end + 1])
-    if not isinstance(parsed, list):
-        raise ValueError(f"Expected a JSON array, got {type(parsed).__name__}")
-    return parsed
