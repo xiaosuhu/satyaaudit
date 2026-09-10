@@ -1,5 +1,5 @@
 ---
-title: SatyaRepro
+title: SatyaAudit
 emoji: 🔬
 colorFrom: blue
 colorTo: green
@@ -10,7 +10,7 @@ app_file: app.py
 pinned: false
 ---
 
-# SatyaRepro
+# SatyaAudit
 
 An agentic AI tool that audits biomedical AI/ML workflows for reproducibility
 issues and generates standards-compliant reports (TRIPOD-AI, NIH DMSP).
